@@ -1,4 +1,4 @@
-name: Build PlatformIO Firmware
+name: Build Smart Watch Firmware
 
 on:
   push:
@@ -15,37 +15,47 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Cache pip
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
+      - name: Setup Arduino CLI
+        uses: arduino/setup-arduino-cli@v2
 
-      - name: Cache PlatformIO
-        uses: actions/cache@v4
-        with:
-          path: ~/.platformio
-          key: ${{ runner.os }}-platformio-${{ hashFiles('**/platformio.ini') }}
-          restore-keys: |
-            ${{ runner.os }}-platformio-
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-
-      - name: Install PlatformIO
+      - name: Install ESP32 Board Core
         run: |
-          python -m pip install --upgrade pip
-          pip install platformio
+          arduino-cli core update-index --additional-urls https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+          arduino-cli core install esp32:esp32 --additional-urls https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
 
-      - name: Run PlatformIO Build
-        run: pio run
+      # Copies local dependencies from the repository to the global Arduino libraries folder
+      - name: Copy Local Libraries (if present)
+        run: |
+          mkdir -p ~/Arduino/libraries
+          if [ -d "libraries" ]; then
+            cp -r libraries/* ~/Arduino/libraries/
+          fi
+          if [ -d "examples/Arduino-v3.2.0/libraries" ]; then
+            cp -r examples/Arduino-v3.2.0/libraries/* ~/Arduino/libraries/
+          fi
+
+      # Debugging step to display exactly what files are in the runner workspace
+      - name: Debug Workspace Structure
+        run: |
+          echo "==== Current Directory Path ===="
+          pwd
+          echo "==== Directory Contents ===="
+          ls -R
+          echo "==== All .ino files found ===="
+          find . -name "*.ino"
+
+      # Compiles the smartwatch firmware. 
+      # Since waveshareControl has the sketch files in the root folder, we compile the root directory "."
+      - name: Compile Sketch
+        run: |
+          arduino-cli compile \
+            --fqbn esp32:esp32:esp32s3 \
+            --board-options "PSRAM=opi,FlashSize=16M" \
+            --output-dir ./build \
+            .
 
       - name: Upload Bin Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: smartwatch-firmware-pio
-          path: .pio/build/*/*.bin
+          name: smartwatch-firmware
+          path: ./build/*.bin
