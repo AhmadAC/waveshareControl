@@ -23,22 +23,14 @@ jobs:
           arduino-cli core update-index --additional-urls https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
           arduino-cli core install esp32:esp32 --additional-urls https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
 
-      # If your sketch requires library installations from the Arduino Library Manager, 
-      # you can uncomment and edit the step below to install additional dependencies
-      # - name: Install Required Libraries
-      #   run: |
-      #     arduino-cli lib install "GFX Library for Arduino"
-      #     arduino-cli lib install "SensorLib"
-      #     arduino-cli lib install "lvgl"
-
-      # Copies local dependencies from the repository to the global Arduino libraries folder
+      # Safely copies local dependencies to the global Arduino libraries folder without breaking if directories are empty
       - name: Copy Local Libraries (if present)
         run: |
           mkdir -p ~/Arduino/libraries
-          if [ -d "libraries" ]; then
+          if [ -d "libraries" ] && [ "$(ls -A libraries 2>/dev/null)" ]; then
             cp -r libraries/* ~/Arduino/libraries/
           fi
-          if [ -d "examples/Arduino-v3.2.0/libraries" ]; then
+          if [ -d "examples/Arduino-v3.2.0/libraries" ] && [ "$(ls -A examples/Arduino-v3.2.0/libraries 2>/dev/null)" ]; then
             cp -r examples/Arduino-v3.2.0/libraries/* ~/Arduino/libraries/
           fi
 
@@ -73,54 +65,59 @@ jobs:
           echo "Found sketch file: $SKETCH_PATH"
           echo "Compiling sketch directory: $SKETCH_DIR"
           
-          # 4. Search the workspace for an existing pin_config.h, or generate a default one
+          # 4. Search the workspace for an existing pin_config.h, or generate a default one safely using echo
           if [ ! -f "$SKETCH_DIR/pin_config.h" ]; then
-            echo "pin_config.h not found in $SKETCH_DIR. Searching the workspace..."
-            PIN_CONFIG_PATH=$(find . -name "pin_config.h" -not -path "*/.*" -print -quit)
+            echo "pin_config.h not found in $SKETCH_DIR. Searching the rest of the workspace..."
+            
+            # Exclude the sketch directory from the search to avoid self-copying warnings/errors
+            PIN_CONFIG_PATH=$(find . -name "pin_config.h" -not -path "$SKETCH_DIR/*" -not -path "*/.*" -print -quit)
             
             if [ -n "$PIN_CONFIG_PATH" ]; then
-              echo "Found pin_config.h at $PIN_CONFIG_PATH. Copying to $SKETCH_DIR/"
-              cp "$PIN_CONFIG_PATH" "$SKETCH_DIR/"
+              echo "Found alternative pin_config.h at $PIN_CONFIG_PATH. Copying to $SKETCH_DIR/"
+              cp "$PIN_CONFIG_PATH" "$SKETCH_DIR/pin_config.h"
             else
               echo "pin_config.h not found in workspace! Generating default ESP32-S3-Touch-AMOLED-2.06 configuration..."
-              cat << 'EOF' > "$SKETCH_DIR/pin_config.h"
-#pragma once
-
-#define XPOWERS_CHIP_AXP2101
-
-#define LCD_WIDTH 410
-#define LCD_HEIGHT 502
-
-#define LCD_CS 38
-#define LCD_SCLK 47
-#define LCD_SDIO0 18
-#define LCD_SDIO1 17
-#define LCD_SDIO2 16
-#define LCD_SDIO3 21
-
-#define IIC_SDA 12
-#define IIC_SCL 11
-#define TP_INT 10
-#define RTC_INT 13
-#define IMU_INT 40
-
-#define I2S_MCK_IO 4
-#define I2S_BCK_IO 5
-#define I2S_DI_IO 7
-#define I2S_WS_IO 6
-#define I2S_DO_IO 8
-
-#define BAT_ADC 14
-#define PWR_ON 15
-EOF
+              
+              # Using a safe echo block to entirely avoid YAML vs Bash EOF indentation errors
+              {
+                echo "#pragma once"
+                echo "#define XPOWERS_CHIP_AXP2101"
+                echo ""
+                echo "#define LCD_WIDTH 410"
+                echo "#define LCD_HEIGHT 502"
+                echo ""
+                echo "#define LCD_CS 38"
+                echo "#define LCD_SCLK 47"
+                echo "#define LCD_SDIO0 18"
+                echo "#define LCD_SDIO1 17"
+                echo "#define LCD_SDIO2 16"
+                echo "#define LCD_SDIO3 21"
+                echo ""
+                echo "#define IIC_SDA 12"
+                echo "#define IIC_SCL 11"
+                echo "#define TP_INT 10"
+                echo "#define RTC_INT 13"
+                echo "#define IMU_INT 40"
+                echo ""
+                echo "#define I2S_MCK_IO 4"
+                echo "#define I2S_BCK_IO 5"
+                echo "#define I2S_DI_IO 7"
+                echo "#define I2S_WS_IO 6"
+                echo "#define I2S_DO_IO 8"
+                echo ""
+                echo "#define BAT_ADC 14"
+                echo "#define PWR_ON 15"
+              } > "$SKETCH_DIR/pin_config.h"
+              
               echo "Default pin_config.h created."
             fi
+          else
+            echo "pin_config.h already exists inside the sketch directory."
           fi
           
           # Compile the dynamically discovered directory
           arduino-cli compile \
-            --fqbn esp32:esp32:esp32s3 \
-            --board-options "PSRAM=opi,FlashSize=16M" \
+            --fqbn esp32:esp32:esp32s3:PSRAM=opi,FlashSize=16M \
             --output-dir ./build \
             "$SKETCH_DIR"
 
