@@ -27,8 +27,7 @@ jobs:
         run: |
           arduino-cli lib update-index
           
-          # 1. Install standard Waveshare dependencies.
-          # We force LVGL v8.3.11 because SquareLine Studio generated UI files are not compatible with LVGL v9+.
+          # 1. Install standard Waveshare dependencies from Arduino Library Manager
           arduino-cli lib install "lvgl@8.3.11"
           arduino-cli lib install "GFX Library for Arduino"
           arduino-cli lib install "XPowersLib"
@@ -41,18 +40,32 @@ jobs:
           # 3. Enable the config file by changing #if 0 to #if 1 at the top of the file
           sed -i 's/#if 0/#if 1/g' ~/Arduino/libraries/lv_conf.h
 
-      # Safely copies local dependencies to the global Arduino libraries folder without breaking if directories are empty
+      - name: Download Proprietary Waveshare Libraries
+        run: |
+          # Custom Waveshare libraries (like Arduino_DriveBus_Library) are not on the Arduino Library Manager.
+          # We must download them directly from the official Waveshare repository.
+          echo "Cloning official Waveshare repository..."
+          git clone --depth 1 https://github.com/waveshareteam/ESP32-S3-Touch-AMOLED-2.06.git /tmp/waveshare_repo
+          
+          # Search for the directory containing Arduino_DriveBus_Library
+          LIB_DIR=$(find /tmp/waveshare_repo -type d -name "Arduino_DriveBus_Library" -print -quit)
+          
+          if [ -n "$LIB_DIR" ]; then
+            PARENT_DIR=$(dirname "$LIB_DIR")
+            echo "Found proprietary libraries at $PARENT_DIR. Copying to global Arduino libraries..."
+            cp -r "$PARENT_DIR"/* ~/Arduino/libraries/
+          else
+            echo "Warning: Arduino_DriveBus_Library not found in official repo!"
+          fi
+
       - name: Copy Local Libraries (if present)
         run: |
+          # If you ever include custom libraries directly in your own repository, copy them over
           mkdir -p ~/Arduino/libraries
           if [ -d "libraries" ] && [ "$(ls -A libraries 2>/dev/null)" ]; then
             cp -r libraries/* ~/Arduino/libraries/
           fi
-          if [ -d "examples/Arduino-v3.2.0/libraries" ] && [ "$(ls -A examples/Arduino-v3.2.0/libraries 2>/dev/null)" ]; then
-            cp -r examples/Arduino-v3.2.0/libraries/* ~/Arduino/libraries/
-          fi
 
-      # Debugging step to display exactly what files are in the runner workspace
       - name: Debug Workspace Structure
         run: |
           echo "==== Current Directory Path ===="
@@ -62,7 +75,6 @@ jobs:
           echo "==== All .ino files found ===="
           find . -name "*.ino"
 
-      # Dynamically detects the sketch, ensures pin_config.h is present, and compiles
       - name: Compile Sketch
         run: |
           # 1. Search for a .ino file that is NOT inside a "libraries" or "examples" folder
