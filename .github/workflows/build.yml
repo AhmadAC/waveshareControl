@@ -23,6 +23,17 @@ jobs:
           arduino-cli core update-index --additional-urls https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
           arduino-cli core install esp32:esp32 --additional-urls https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
 
+      # ACTIVATE LIBRARY INSTALLATION:
+      # This downloads LVGL and other common Waveshare smartwatch dependencies
+      # from the Arduino Library Manager directly into the runner.
+      - name: Install Required Libraries
+        run: |
+          arduino-cli lib update-index
+          arduino-cli lib install "lvgl"
+          arduino-cli lib install "GFX Library for Arduino"
+          arduino-cli lib install "XPowersLib"
+          arduino-cli lib install "SensorLib"
+
       # Safely copies local dependencies to the global Arduino libraries folder without breaking if directories are empty
       - name: Copy Local Libraries (if present)
         run: |
