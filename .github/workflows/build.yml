@@ -23,16 +23,23 @@ jobs:
           arduino-cli core update-index --additional-urls https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
           arduino-cli core install esp32:esp32 --additional-urls https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
 
-      # ACTIVATE LIBRARY INSTALLATION:
-      # This downloads LVGL and other common Waveshare smartwatch dependencies
-      # from the Arduino Library Manager directly into the runner.
-      - name: Install Required Libraries
+      - name: Install Required Libraries & Setup LVGL
         run: |
           arduino-cli lib update-index
-          arduino-cli lib install "lvgl"
+          
+          # 1. Install standard Waveshare dependencies.
+          # We force LVGL v8.3.11 because SquareLine Studio generated UI files are not compatible with LVGL v9+.
+          arduino-cli lib install "lvgl@8.3.11"
           arduino-cli lib install "GFX Library for Arduino"
           arduino-cli lib install "XPowersLib"
           arduino-cli lib install "SensorLib"
+          
+          # 2. Setup the lv_conf.h configuration file
+          echo "Setting up lv_conf.h..."
+          cp ~/Arduino/libraries/lvgl/lv_conf_template.h ~/Arduino/libraries/lv_conf.h
+          
+          # 3. Enable the config file by changing #if 0 to #if 1 at the top of the file
+          sed -i 's/#if 0/#if 1/g' ~/Arduino/libraries/lv_conf.h
 
       # Safely copies local dependencies to the global Arduino libraries folder without breaking if directories are empty
       - name: Copy Local Libraries (if present)
@@ -80,7 +87,6 @@ jobs:
           if [ ! -f "$SKETCH_DIR/pin_config.h" ]; then
             echo "pin_config.h not found in $SKETCH_DIR. Searching the rest of the workspace..."
             
-            # Exclude the sketch directory from the search to avoid self-copying warnings/errors
             PIN_CONFIG_PATH=$(find . -name "pin_config.h" -not -path "$SKETCH_DIR/*" -not -path "*/.*" -print -quit)
             
             if [ -n "$PIN_CONFIG_PATH" ]; then
@@ -89,7 +95,6 @@ jobs:
             else
               echo "pin_config.h not found in workspace! Generating default ESP32-S3-Touch-AMOLED-2.06 configuration..."
               
-              # Using a safe echo block to entirely avoid YAML vs Bash EOF indentation errors
               {
                 echo "#pragma once"
                 echo "#define XPOWERS_CHIP_AXP2101"
