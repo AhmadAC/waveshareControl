@@ -23,6 +23,14 @@ jobs:
           arduino-cli core update-index --additional-urls https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
           arduino-cli core install esp32:esp32 --additional-urls https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
 
+      # If your sketch requires library installations from the Arduino Library Manager, 
+      # you can uncomment and edit the step below to install additional dependencies
+      # - name: Install Required Libraries
+      #   run: |
+      #     arduino-cli lib install "GFX Library for Arduino"
+      #     arduino-cli lib install "SensorLib"
+      #     arduino-cli lib install "lvgl"
+
       # Copies local dependencies from the repository to the global Arduino libraries folder
       - name: Copy Local Libraries (if present)
         run: |
@@ -44,7 +52,7 @@ jobs:
           echo "==== All .ino files found ===="
           find . -name "*.ino"
 
-      # Dynamically finds the main sketch directory and compiles it
+      # Dynamically detects the sketch, ensures pin_config.h is present, and compiles
       - name: Compile Sketch
         run: |
           # 1. Search for a .ino file that is NOT inside a "libraries" or "examples" folder
@@ -64,6 +72,50 @@ jobs:
           SKETCH_DIR=$(dirname "$SKETCH_PATH")
           echo "Found sketch file: $SKETCH_PATH"
           echo "Compiling sketch directory: $SKETCH_DIR"
+          
+          # 4. Search the workspace for an existing pin_config.h, or generate a default one
+          if [ ! -f "$SKETCH_DIR/pin_config.h" ]; then
+            echo "pin_config.h not found in $SKETCH_DIR. Searching the workspace..."
+            PIN_CONFIG_PATH=$(find . -name "pin_config.h" -not -path "*/.*" -print -quit)
+            
+            if [ -n "$PIN_CONFIG_PATH" ]; then
+              echo "Found pin_config.h at $PIN_CONFIG_PATH. Copying to $SKETCH_DIR/"
+              cp "$PIN_CONFIG_PATH" "$SKETCH_DIR/"
+            else
+              echo "pin_config.h not found in workspace! Generating default ESP32-S3-Touch-AMOLED-2.06 configuration..."
+              cat << 'EOF' > "$SKETCH_DIR/pin_config.h"
+#pragma once
+
+#define XPOWERS_CHIP_AXP2101
+
+#define LCD_WIDTH 410
+#define LCD_HEIGHT 502
+
+#define LCD_CS 38
+#define LCD_SCLK 47
+#define LCD_SDIO0 18
+#define LCD_SDIO1 17
+#define LCD_SDIO2 16
+#define LCD_SDIO3 21
+
+#define IIC_SDA 12
+#define IIC_SCL 11
+#define TP_INT 10
+#define RTC_INT 13
+#define IMU_INT 40
+
+#define I2S_MCK_IO 4
+#define I2S_BCK_IO 5
+#define I2S_DI_IO 7
+#define I2S_WS_IO 6
+#define I2S_DO_IO 8
+
+#define BAT_ADC 14
+#define PWR_ON 15
+EOF
+              echo "Default pin_config.h created."
+            fi
+          fi
           
           # Compile the dynamically discovered directory
           arduino-cli compile \
