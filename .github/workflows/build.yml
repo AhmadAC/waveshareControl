@@ -44,15 +44,33 @@ jobs:
           echo "==== All .ino files found ===="
           find . -name "*.ino"
 
-      # Compiles the smartwatch firmware. 
-      # Since waveshareControl has the sketch files in the root folder, we compile the root directory "."
+      # Dynamically finds the main sketch directory and compiles it
       - name: Compile Sketch
         run: |
+          # 1. Search for a .ino file that is NOT inside a "libraries" or "examples" folder
+          SKETCH_PATH=$(find . -name "*.ino" -not -path "*/libraries/*" -not -path "*/examples/*" -not -path "*/.*" -print -quit)
+          
+          # 2. If not found, fall back to any .ino file in the repository
+          if [ -z "$SKETCH_PATH" ]; then
+            SKETCH_PATH=$(find . -name "*.ino" -not -path "*/.*" -print -quit)
+          fi
+          
+          # 3. If still not found, throw an error
+          if [ -z "$SKETCH_PATH" ]; then
+            echo "Error: No .ino file found in the workspace!"
+            exit 1
+          fi
+          
+          SKETCH_DIR=$(dirname "$SKETCH_PATH")
+          echo "Found sketch file: $SKETCH_PATH"
+          echo "Compiling sketch directory: $SKETCH_DIR"
+          
+          # Compile the dynamically discovered directory
           arduino-cli compile \
             --fqbn esp32:esp32:esp32s3 \
             --board-options "PSRAM=opi,FlashSize=16M" \
             --output-dir ./build \
-            .
+            "$SKETCH_DIR"
 
       - name: Upload Bin Artifact
         uses: actions/upload-artifact@v4
