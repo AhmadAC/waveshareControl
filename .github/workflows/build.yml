@@ -27,7 +27,7 @@ jobs:
         run: |
           arduino-cli lib update-index
           
-          # 1. Install standard Waveshare dependencies from Arduino Library Manager
+          # 1. Install standard dependencies from Arduino Library Manager
           arduino-cli lib install "lvgl@8.3.11"
           arduino-cli lib install "GFX Library for Arduino"
           arduino-cli lib install "XPowersLib"
@@ -42,25 +42,28 @@ jobs:
 
       - name: Download Proprietary Waveshare Libraries
         run: |
-          # Custom Waveshare libraries (like Arduino_DriveBus_Library) are not on the Arduino Library Manager.
-          # We must download them directly from the official Waveshare repository.
           echo "Cloning official Waveshare repository..."
           git clone --depth 1 https://github.com/waveshareteam/ESP32-S3-Touch-AMOLED-2.06.git /tmp/waveshare_repo
           
-          # Search for the directory containing Arduino_DriveBus_Library
-          LIB_DIR=$(find /tmp/waveshare_repo -type d -name "Arduino_DriveBus_Library" -print -quit)
+          # Search for the header file instead of the directory name
+          HEADER_PATH=$(find /tmp/waveshare_repo -type f -name "Arduino_DriveBus_Library.h" -print -quit)
           
-          if [ -n "$LIB_DIR" ]; then
+          if [ -n "$HEADER_PATH" ]; then
+            # Get the folder containing the header (e.g., .../Arduino_DriveBus/)
+            LIB_DIR=$(dirname "$HEADER_PATH")
+            # Get the parent folder that holds all Waveshare libraries
             PARENT_DIR=$(dirname "$LIB_DIR")
-            echo "Found proprietary libraries at $PARENT_DIR. Copying to global Arduino libraries..."
+            
+            echo "Found proprietary libraries at $PARENT_DIR."
+            echo "Copying them to global Arduino libraries..."
             cp -r "$PARENT_DIR"/* ~/Arduino/libraries/
           else
-            echo "Warning: Arduino_DriveBus_Library not found in official repo!"
+            echo "Error: Arduino_DriveBus_Library.h not found in official repo!"
+            exit 1
           fi
 
       - name: Copy Local Libraries (if present)
         run: |
-          # If you ever include custom libraries directly in your own repository, copy them over
           mkdir -p ~/Arduino/libraries
           if [ -d "libraries" ] && [ "$(ls -A libraries 2>/dev/null)" ]; then
             cp -r libraries/* ~/Arduino/libraries/
@@ -74,6 +77,8 @@ jobs:
           ls -R
           echo "==== All .ino files found ===="
           find . -name "*.ino"
+          echo "==== Installed Global Libraries ===="
+          ls -la ~/Arduino/libraries/
 
       - name: Compile Sketch
         run: |
