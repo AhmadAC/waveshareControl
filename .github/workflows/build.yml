@@ -34,6 +34,9 @@ jobs:
           arduino-cli lib install "XPowersLib"
           arduino-cli lib install "SensorLib"
           
+          # Install LVGL demos package to resolve missing demos/lv_demos.h error
+          arduino-cli lib install "lv_demos"
+          
           # 2. Setup the lv_conf.h configuration file
           echo "Setting up lv_conf.h..."
           cp ~/Arduino/libraries/lvgl/lv_conf_template.h ~/Arduino/libraries/lv_conf.h
@@ -46,6 +49,9 @@ jobs:
           
           # Enable User Data (often required for Squareline Studio animations)
           sed -i 's/#define LV_USE_USER_DATA.*/#define LV_USE_USER_DATA 1/g' ~/Arduino/libraries/lv_conf.h
+          
+          # Ensure LVGL Demos are enabled in the configuration
+          sed -i 's/#define LV_USE_DEMOS.*/#define LV_USE_DEMOS 1/g' ~/Arduino/libraries/lv_conf.h
 
       - name: Download Proprietary Waveshare Libraries
         run: |
