@@ -46,9 +46,6 @@ jobs:
           
           # Enable User Data (often required for Squareline Studio animations)
           sed -i 's/#define LV_USE_USER_DATA.*/#define LV_USE_USER_DATA 1/g' ~/Arduino/libraries/lv_conf.h
-          
-          # Ensure LVGL Demos are enabled in the configuration
-          sed -i 's/#define LV_USE_DEMOS.*/#define LV_USE_DEMOS 1/g' ~/Arduino/libraries/lv_conf.h
 
       - name: Download Proprietary Waveshare Libraries
         run: |
@@ -59,7 +56,7 @@ jobs:
           HEADER_PATH=$(find /tmp/waveshare_repo -type f -name "Arduino_DriveBus_Library.h" -print -quit)
           
           if [ -n "$HEADER_PATH" ]; then
-            # Get the folder containing the header (e.g., .../Arduino_DriveBus/)
+            # Get the folder containing the header
             LIB_DIR=$(dirname "$HEADER_PATH")
             # Get the parent folder that holds all Waveshare libraries
             PARENT_DIR=$(dirname "$LIB_DIR")
@@ -79,21 +76,9 @@ jobs:
             cp -r libraries/* ~/Arduino/libraries/
           fi
 
-      - name: Debug Workspace Structure
-        run: |
-          echo "==== Current Directory Path ===="
-          pwd
-          echo "==== Directory Contents ===="
-          ls -R
-          echo "==== All .ino files found ===="
-          find . -name "*.ino"
-          echo "==== Installed Global Libraries ===="
-          ls -la ~/Arduino/libraries/
-
       - name: Flatten Subdirectories for Arduino CLI
         run: |
           # Arduino CLI does not natively compile .c files inside subdirectories 
-          # (like SquareLine's 'fonts' folder) unless they are moved to the root or 'src/'.
           SKETCH_PATH=$(find . -name "*.ino" -not -path "*/libraries/*" -not -path "*/examples/*" -not -path "*/.*" -print -quit)
           
           if [ -z "$SKETCH_PATH" ]; then
@@ -109,7 +94,6 @@ jobs:
               rmdir "$SKETCH_DIR/fonts"
             fi
             
-            # Optionally flatten an assets folder if SquareLine exports images there in the future
             if [ -d "$SKETCH_DIR/assets" ]; then
               echo "Flattening 'assets' directory into sketch root..."
               mv "$SKETCH_DIR/assets/"* "$SKETCH_DIR/" 2>/dev/null || true
@@ -117,9 +101,27 @@ jobs:
             fi
           fi
 
+      - name: Patch Legacy LVGL Includes in Sketch
+        run: |
+          SKETCH_PATH=$(find . -name "*.ino" -not -path "*/libraries/*" -not -path "*/examples/*" -not -path "*/.*" -print -quit)
+          if [ -z "$SKETCH_PATH" ]; then
+            SKETCH_PATH=$(find . -name "*.ino" -not -path "*/.*" -print -quit)
+          fi
+          
+          if [ -n "$SKETCH_PATH" ]; then
+            echo "Patching $SKETCH_PATH to remove obsolete lv_demos.h..."
+            # Comment out legacy demo includes
+            sed -i 's/#include <demos\/lv_demos.h>/\/\/ #include <demos\/lv_demos.h>/g' "$SKETCH_PATH"
+            sed -i 's/#include "demos\/lv_demos.h"/\/\/ #include "demos\/lv_demos.h"/g' "$SKETCH_PATH"
+            
+            # Comment out lingering demo calls to prevent undefined reference errors
+            sed -i 's/lv_demo_benchmark();/\/\/ lv_demo_benchmark();/g' "$SKETCH_PATH"
+            sed -i 's/lv_demo_widgets();/\/\/ lv_demo_widgets();/g' "$SKETCH_PATH"
+            sed -i 's/lv_demo_music();/\/\/ lv_demo_music();/g' "$SKETCH_PATH"
+          fi
+
       - name: Compile Sketch
         run: |
-          # Re-evaluate SKETCH_PATH after flattening
           SKETCH_PATH=$(find . -name "*.ino" -not -path "*/libraries/*" -not -path "*/examples/*" -not -path "*/.*" -print -quit)
           
           if [ -z "$SKETCH_PATH" ]; then
@@ -136,53 +138,38 @@ jobs:
           echo "Compiling sketch directory: $SKETCH_DIR"
           
           if [ ! -f "$SKETCH_DIR/pin_config.h" ]; then
-            echo "pin_config.h not found in $SKETCH_DIR. Searching the rest of the workspace..."
-            
-            PIN_CONFIG_PATH=$(find . -name "pin_config.h" -not -path "$SKETCH_DIR/*" -not -path "*/.*" -print -quit)
-            
-            if [ -n "$PIN_CONFIG_PATH" ]; then
-              echo "Found alternative pin_config.h at $PIN_CONFIG_PATH. Copying to $SKETCH_DIR/"
-              cp "$PIN_CONFIG_PATH" "$SKETCH_DIR/pin_config.h"
-            else
-              echo "pin_config.h not found in workspace! Generating default ESP32-S3-Touch-AMOLED-2.06 configuration..."
-              
-              {
-                echo "#pragma once"
-                echo "#define XPOWERS_CHIP_AXP2101"
-                echo ""
-                echo "#define LCD_WIDTH 410"
-                echo "#define LCD_HEIGHT 502"
-                echo ""
-                echo "#define LCD_CS 38"
-                echo "#define LCD_SCLK 47"
-                echo "#define LCD_SDIO0 18"
-                echo "#define LCD_SDIO1 17"
-                echo "#define LCD_SDIO2 16"
-                echo "#define LCD_SDIO3 21"
-                echo ""
-                echo "#define IIC_SDA 12"
-                echo "#define IIC_SCL 11"
-                echo "#define TP_INT 10"
-                echo "#define RTC_INT 13"
-                echo "#define IMU_INT 40"
-                echo ""
-                echo "#define I2S_MCK_IO 4"
-                echo "#define I2S_BCK_IO 5"
-                echo "#define I2S_DI_IO 7"
-                echo "#define I2S_WS_IO 6"
-                echo "#define I2S_DO_IO 8"
-                echo ""
-                echo "#define BAT_ADC 14"
-                echo "#define PWR_ON 15"
-              } > "$SKETCH_DIR/pin_config.h"
-              
-              echo "Default pin_config.h created."
-            fi
-          else
-            echo "pin_config.h already exists inside the sketch directory."
+            echo "pin_config.h not found. Generating default ESP32-S3-Touch-AMOLED-2.06 configuration..."
+            {
+              echo "#pragma once"
+              echo "#define XPOWERS_CHIP_AXP2101"
+              echo ""
+              echo "#define LCD_WIDTH 410"
+              echo "#define LCD_HEIGHT 502"
+              echo ""
+              echo "#define LCD_CS 38"
+              echo "#define LCD_SCLK 47"
+              echo "#define LCD_SDIO0 18"
+              echo "#define LCD_SDIO1 17"
+              echo "#define LCD_SDIO2 16"
+              echo "#define LCD_SDIO3 21"
+              echo ""
+              echo "#define IIC_SDA 12"
+              echo "#define IIC_SCL 11"
+              echo "#define TP_INT 10"
+              echo "#define RTC_INT 13"
+              echo "#define IMU_INT 40"
+              echo ""
+              echo "#define I2S_MCK_IO 4"
+              echo "#define I2S_BCK_IO 5"
+              echo "#define I2S_DI_IO 7"
+              echo "#define I2S_WS_IO 6"
+              echo "#define I2S_DO_IO 8"
+              echo ""
+              echo "#define BAT_ADC 14"
+              echo "#define PWR_ON 15"
+            } > "$SKETCH_DIR/pin_config.h"
           fi
           
-          # Compile the dynamically discovered directory
           arduino-cli compile \
             --fqbn esp32:esp32:esp32s3:PSRAM=opi,FlashSize=16M \
             --export-binaries \
