@@ -33,6 +33,7 @@ jobs:
           arduino-cli lib install "GFX Library for Arduino"
           arduino-cli lib install "XPowersLib"
           arduino-cli lib install "SensorLib"
+          arduino-cli lib install "lv_demos"
           
           # 2. Setup the lv_conf.h configuration file
           echo "Setting up lv_conf.h..."
@@ -46,6 +47,18 @@ jobs:
           
           # Enable User Data (often required for Squareline Studio animations)
           sed -i 's/#define LV_USE_USER_DATA.*/#define LV_USE_USER_DATA 1/g' ~/Arduino/libraries/lv_conf.h
+          
+          # Ensure LVGL Demos are enabled in the configuration
+          sed -i 's/#define LV_USE_DEMOS.*/#define LV_USE_DEMOS 1/g' ~/Arduino/libraries/lv_conf.h
+          
+          # Enable required Montserrat fonts for SquareLine Studio UI
+          sed -i 's/#define LV_FONT_MONTSERRAT_12 0/#define LV_FONT_MONTSERRAT_12 1/g' ~/Arduino/libraries/lv_conf.h
+          sed -i 's/#define LV_FONT_MONTSERRAT_16 0/#define LV_FONT_MONTSERRAT_16 1/g' ~/Arduino/libraries/lv_conf.h
+          sed -i 's/#define LV_FONT_MONTSERRAT_18 0/#define LV_FONT_MONTSERRAT_18 1/g' ~/Arduino/libraries/lv_conf.h
+          sed -i 's/#define LV_FONT_MONTSERRAT_20 0/#define LV_FONT_MONTSERRAT_20 1/g' ~/Arduino/libraries/lv_conf.h
+          sed -i 's/#define LV_FONT_MONTSERRAT_22 0/#define LV_FONT_MONTSERRAT_22 1/g' ~/Arduino/libraries/lv_conf.h
+          sed -i 's/#define LV_FONT_MONTSERRAT_24 0/#define LV_FONT_MONTSERRAT_24 1/g' ~/Arduino/libraries/lv_conf.h
+          sed -i 's/#define LV_FONT_MONTSERRAT_26 0/#define LV_FONT_MONTSERRAT_26 1/g' ~/Arduino/libraries/lv_conf.h
 
       - name: Download Proprietary Waveshare Libraries
         run: |
@@ -152,6 +165,8 @@ jobs:
               echo "#define LCD_SDIO1 17"
               echo "#define LCD_SDIO2 16"
               echo "#define LCD_SDIO3 21"
+              echo "#define LCD_RST 39"
+              echo "#define LCD_RESET 39"
               echo ""
               echo "#define IIC_SDA 12"
               echo "#define IIC_SCL 11"
