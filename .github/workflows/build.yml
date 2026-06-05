@@ -28,7 +28,8 @@ jobs:
           arduino-cli lib update-index
           
           # 1. Install standard dependencies from Arduino Library Manager
-          arduino-cli lib install "lvgl@8.3.11"
+          # Matched LVGL version to Squareline Studio 1.5.0 generated code (9.1.0)
+          arduino-cli lib install "lvgl@9.1.0"
           arduino-cli lib install "GFX Library for Arduino"
           arduino-cli lib install "XPowersLib"
           arduino-cli lib install "SensorLib"
@@ -39,6 +40,12 @@ jobs:
           
           # 3. Enable the config file by changing #if 0 to #if 1 at the top of the file
           sed -i 's/#if 0/#if 1/g' ~/Arduino/libraries/lv_conf.h
+          
+          # 4. Explicitly set LV_COLOR_DEPTH to 16 as required by SquareLine Studio
+          sed -i 's/#define LV_COLOR_DEPTH.*/#define LV_COLOR_DEPTH 16/g' ~/Arduino/libraries/lv_conf.h
+          
+          # Enable User Data (often required for Squareline Studio animations)
+          sed -i 's/#define LV_USE_USER_DATA.*/#define LV_USE_USER_DATA 1/g' ~/Arduino/libraries/lv_conf.h
 
       - name: Download Proprietary Waveshare Libraries
         run: |
@@ -80,17 +87,42 @@ jobs:
           echo "==== Installed Global Libraries ===="
           ls -la ~/Arduino/libraries/
 
-      - name: Compile Sketch
+      - name: Flatten Subdirectories for Arduino CLI
         run: |
-          # 1. Search for a .ino file that is NOT inside a "libraries" or "examples" folder
+          # Arduino CLI does not natively compile .c files inside subdirectories 
+          # (like SquareLine's 'fonts' folder) unless they are moved to the root or 'src/'.
           SKETCH_PATH=$(find . -name "*.ino" -not -path "*/libraries/*" -not -path "*/examples/*" -not -path "*/.*" -print -quit)
           
-          # 2. If not found, fall back to any .ino file in the repository
           if [ -z "$SKETCH_PATH" ]; then
             SKETCH_PATH=$(find . -name "*.ino" -not -path "*/.*" -print -quit)
           fi
           
-          # 3. If still not found, throw an error
+          if [ -n "$SKETCH_PATH" ]; then
+            SKETCH_DIR=$(dirname "$SKETCH_PATH")
+            
+            if [ -d "$SKETCH_DIR/fonts" ]; then
+              echo "Flattening 'fonts' directory into sketch root..."
+              mv "$SKETCH_DIR/fonts/"* "$SKETCH_DIR/"
+              rmdir "$SKETCH_DIR/fonts"
+            fi
+            
+            # Optionally flatten an assets folder if SquareLine exports images there in the future
+            if [ -d "$SKETCH_DIR/assets" ]; then
+              echo "Flattening 'assets' directory into sketch root..."
+              mv "$SKETCH_DIR/assets/"* "$SKETCH_DIR/" 2>/dev/null || true
+              rmdir "$SKETCH_DIR/assets" 2>/dev/null || true
+            fi
+          fi
+
+      - name: Compile Sketch
+        run: |
+          # Re-evaluate SKETCH_PATH after flattening
+          SKETCH_PATH=$(find . -name "*.ino" -not -path "*/libraries/*" -not -path "*/examples/*" -not -path "*/.*" -print -quit)
+          
+          if [ -z "$SKETCH_PATH" ]; then
+            SKETCH_PATH=$(find . -name "*.ino" -not -path "*/.*" -print -quit)
+          fi
+          
           if [ -z "$SKETCH_PATH" ]; then
             echo "Error: No .ino file found in the workspace!"
             exit 1
@@ -100,7 +132,6 @@ jobs:
           echo "Found sketch file: $SKETCH_PATH"
           echo "Compiling sketch directory: $SKETCH_DIR"
           
-          # 4. Search the workspace for an existing pin_config.h, or generate a default one safely using echo
           if [ ! -f "$SKETCH_DIR/pin_config.h" ]; then
             echo "pin_config.h not found in $SKETCH_DIR. Searching the rest of the workspace..."
             
@@ -151,6 +182,7 @@ jobs:
           # Compile the dynamically discovered directory
           arduino-cli compile \
             --fqbn esp32:esp32:esp32s3:PSRAM=opi,FlashSize=16M \
+            --export-binaries \
             --output-dir ./build \
             "$SKETCH_DIR"
 
