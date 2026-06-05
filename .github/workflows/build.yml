@@ -33,7 +33,6 @@ jobs:
           arduino-cli lib install "GFX Library for Arduino"
           arduino-cli lib install "XPowersLib"
           arduino-cli lib install "SensorLib"
-          arduino-cli lib install "lv_demos"
           
           # 2. Setup the lv_conf.h configuration file
           echo "Setting up lv_conf.h..."
@@ -48,8 +47,8 @@ jobs:
           # Enable User Data (often required for Squareline Studio animations)
           sed -i 's/#define LV_USE_USER_DATA.*/#define LV_USE_USER_DATA 1/g' ~/Arduino/libraries/lv_conf.h
           
-          # Ensure LVGL Demos are enabled in the configuration
-          sed -i 's/#define LV_USE_DEMOS.*/#define LV_USE_DEMOS 1/g' ~/Arduino/libraries/lv_conf.h
+          # Disable LVGL Demos in the configuration
+          sed -i 's/#define LV_USE_DEMOS.*/#define LV_USE_DEMOS 0/g' ~/Arduino/libraries/lv_conf.h
           
           # Enable required Montserrat fonts for SquareLine Studio UI
           sed -i 's/#define LV_FONT_MONTSERRAT_12 0/#define LV_FONT_MONTSERRAT_12 1/g' ~/Arduino/libraries/lv_conf.h
