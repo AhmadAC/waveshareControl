@@ -23,30 +23,48 @@ jobs:
           arduino-cli core update-index --additional-urls https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
           arduino-cli core install esp32:esp32 --additional-urls https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
 
-      - name: Install Required Libraries & Setup LVGL
+      - name: Prepare Libraries (Waveshare + LVGL)
         run: |
+          mkdir -p ~/Arduino/libraries
+          
+          # 1. Clone official Waveshare repository
+          echo "Cloning official Waveshare repository..."
+          git clone --depth 1 https://github.com/waveshareteam/ESP32-S3-Touch-AMOLED-2.06.git /tmp/waveshare_repo
+          
+          HEADER_PATH=$(find /tmp/waveshare_repo -type f -name "Arduino_DriveBus_Library.h" -print -quit)
+          
+          if [ -n "$HEADER_PATH" ]; then
+            # Navigate up to the folder that holds all of Waveshare's provided libraries
+            if [[ "$HEADER_PATH" == */src/* ]]; then
+              LIB_ROOT=$(dirname $(dirname "$HEADER_PATH"))
+            else
+              LIB_ROOT=$(dirname "$HEADER_PATH")
+            fi
+            LIBRARIES_DIR=$(dirname "$LIB_ROOT")
+            
+            echo "Copying Waveshare hardware libraries from $LIBRARIES_DIR..."
+            cp -r "$LIBRARIES_DIR"/* ~/Arduino/libraries/
+          else
+            echo "Error: Arduino_DriveBus_Library.h not found in official repo!"
+            exit 1
+          fi
+          
+          # 2. Delete Waveshare's bundled LVGL to prevent version mixing errors
+          echo "Purging bundled LVGL..."
+          rm -rf ~/Arduino/libraries/lvgl
+          
+          # 3. Install clean LVGL 9.1.0 (to match SquareLine Studio 1.5.0)
+          echo "Installing clean LVGL 9.1.0..."
           arduino-cli lib update-index
-          
-          # 1. Install standard dependencies from Arduino Library Manager
           arduino-cli lib install "lvgl@9.1.0"
-          arduino-cli lib install "GFX Library for Arduino"
-          arduino-cli lib install "XPowersLib"
-          arduino-cli lib install "SensorLib"
           
-          # 2. Setup the lv_conf.h configuration file
+          # 4. Setup the lv_conf.h configuration file
           echo "Setting up lv_conf.h..."
           cp ~/Arduino/libraries/lvgl/lv_conf_template.h ~/Arduino/libraries/lv_conf.h
           
-          # 3. Enable the config file by changing #if 0 to #if 1 at the top of the file
           sed -i 's/#if 0/#if 1/g' ~/Arduino/libraries/lv_conf.h
-          
-          # 4. Explicitly set LV_COLOR_DEPTH to 16 as required by SquareLine Studio
           sed -i 's/#define LV_COLOR_DEPTH.*/#define LV_COLOR_DEPTH 16/g' ~/Arduino/libraries/lv_conf.h
-          
-          # Enable User Data (often required for Squareline Studio animations)
           sed -i 's/#define LV_USE_USER_DATA.*/#define LV_USE_USER_DATA 1/g' ~/Arduino/libraries/lv_conf.h
-          
-          # Disable LVGL Demos in the configuration
           sed -i 's/#define LV_USE_DEMOS.*/#define LV_USE_DEMOS 0/g' ~/Arduino/libraries/lv_conf.h
           
           # Enable required Montserrat fonts for SquareLine Studio UI
@@ -58,40 +76,8 @@ jobs:
           sed -i 's/#define LV_FONT_MONTSERRAT_24 0/#define LV_FONT_MONTSERRAT_24 1/g' ~/Arduino/libraries/lv_conf.h
           sed -i 's/#define LV_FONT_MONTSERRAT_26 0/#define LV_FONT_MONTSERRAT_26 1/g' ~/Arduino/libraries/lv_conf.h
 
-      - name: Download Proprietary Waveshare Libraries
-        run: |
-          echo "Cloning official Waveshare repository..."
-          git clone --depth 1 https://github.com/waveshareteam/ESP32-S3-Touch-AMOLED-2.06.git /tmp/waveshare_repo
-          
-          HEADER_PATH=$(find /tmp/waveshare_repo -type f -name "Arduino_DriveBus_Library.h" -print -quit)
-          
-          if [ -n "$HEADER_PATH" ]; then
-            # Determine the actual root of the library (handles whether it's inside a 'src/' folder or not)
-            if [[ "$HEADER_PATH" == */src/* ]]; then
-              LIB_ROOT=$(dirname $(dirname "$HEADER_PATH"))
-            else
-              LIB_ROOT=$(dirname "$HEADER_PATH")
-            fi
-            
-            echo "Found proprietary library root at $LIB_ROOT"
-            cp -r "$LIB_ROOT" ~/Arduino/libraries/
-            
-            # Copy any other companion libraries in the same parent directory
-            LIBRARIES_DIR=$(dirname "$LIB_ROOT")
-            echo "Copying other libraries from $LIBRARIES_DIR..."
-            for dir in "$LIBRARIES_DIR"/*; do
-              if [ -d "$dir" ] && [ "$(basename "$dir")" != "$(basename "$LIB_ROOT")" ]; then
-                cp -r "$dir" ~/Arduino/libraries/ 2>/dev/null || true
-              fi
-            done
-          else
-            echo "Error: Arduino_DriveBus_Library.h not found in official repo!"
-            exit 1
-          fi
-
       - name: Copy Local Libraries (if present)
         run: |
-          mkdir -p ~/Arduino/libraries
           if [ -d "libraries" ] && [ "$(ls -A libraries 2>/dev/null)" ]; then
             cp -r libraries/* ~/Arduino/libraries/
           fi
